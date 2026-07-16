@@ -60,6 +60,7 @@
       <span><b>Out / In / Both</b> &mdash; filter direction of movement shown</span>
       <span><b>Zoom into a segment</b> to reveal &amp; hover individual players</span>
       <span><b>Drag</b> to pan, <b>Ctrl/Cmd+scroll</b> or the +/&minus; buttons to zoom</span>
+      <span><b>Search a player</b> by name to pull up their info box; click the box to highlight their ribbon</span>
     </div>
   </header>
 
@@ -75,6 +76,10 @@
               <label><input type="radio" name="dir-bball" value="in"> In</label>
             </div>
             <label class="toggle-label"><input type="checkbox" id="showall-bball"> Show all transfers</label>
+            <div class="player-search">
+              <input type="text" id="playersearch-bball" placeholder="Search player&hellip;" autocomplete="off" aria-label="Search player">
+              <div class="player-search-results" id="playersearch-results-bball" hidden></div>
+            </div>
             <span class="pin-chip" id="pinchip-bball"><span id="pinlabel-bball"></span><button type="button" id="pinclear-bball" title="Clear pin">&times;</button></span>
             <div class="zoom-controls">
               <button type="button" id="zoomin-bball" title="Zoom in">+</button>
@@ -112,6 +117,7 @@
 
 <div id="tooltip"></div>
 <div id="pin-tooltip"></div>
+<div id="player-search-tip"></div>
 
 <div id="side-panel">
   <div id="side-panel-header">
