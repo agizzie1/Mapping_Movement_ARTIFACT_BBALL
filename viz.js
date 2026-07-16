@@ -583,7 +583,11 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     }
     left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
     top = Math.max(8, Math.min(top, window.innerHeight - tipRect.height - 8));
-    pinTooltip.style("left", left + "px").style("top", top + "px");
+    // #pin-tooltip is position:absolute (page coordinates), not fixed, so it
+    // scrolls along with the diagram instead of floating over unrelated page
+    // content when the user scrolls -- convert the viewport-relative numbers
+    // above into page-relative ones by adding the current scroll offset.
+    pinTooltip.style("left", (left + window.scrollX) + "px").style("top", (top + window.scrollY) + "px");
   }
   function hidePinTip() { pinTooltip.style("display", "none"); }
 
@@ -1177,21 +1181,28 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     if (p.type === "player") return `${p.dep.n} &mdash; ${p.school} &rarr; ${p.dep.t} (${p.dep.d})`;
     return p.key;
   }
-  function redrawPin() {
+  // `reposition` controls whether the pin-tooltip's on-screen corner is
+  // recomputed. It defaults to false so that panning/zooming (which calls
+  // this via refreshRibbonsForZoom on every frame, purely to keep pinned
+  // ribbons drawn correctly) redraws content only and leaves the box sitting
+  // wherever it originally landed. Only the initial pin (setPin) passes
+  // reposition:true, since that's the one moment a *new* anchor is chosen.
+  function redrawPin({ reposition = false } = {}) {
     gPinConfChords.selectAll("*").remove();
     gPinSchoolChords.selectAll("*").remove();
     gPinPlayerChords.selectAll("*").remove();
     root.selectAll(".pin-highlight").classed("pin-highlight", false);
-    hidePinTip();
+    if (reposition) hidePinTip();
     if (pin) {
       if (pin.type === "conference") {
         renderConferenceChords(gPinConfChords, pin.key, direction);
         const labelSel = gConfLabels.selectAll("text.conf-label").filter(d => d.conference === pin.key);
         labelSel.classed("pin-highlight", true);
-        const labelNode = labelSel.node();
-        if (labelNode) {
-          const rect = labelNode.getBoundingClientRect();
-          showPinTip(confStatsHtml(pin.key), rect);
+        if (reposition) {
+          const labelNode = labelSel.node();
+          if (labelNode) showPinTip(confStatsHtml(pin.key), labelNode.getBoundingClientRect());
+        } else {
+          pinTooltip.html(confStatsHtml(pin.key));
         }
       } else if (pin.type === "school") {
         renderSchoolChords(gPinSchoolChords, pin.key, direction);
@@ -1204,7 +1215,7 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     restoreBaseDim();
     updatePinIndicator();
   }
-  function setPin(next) { pin = next; pinnedSegKey = null; redrawPin(); }
+  function setPin(next) { pin = next; pinnedSegKey = null; redrawPin({ reposition: true }); }
   function togglePin(candidate) {
     if (pin && pin.type === candidate.type && pin.key === candidate.key) setPin(null);
     else setPin(candidate);

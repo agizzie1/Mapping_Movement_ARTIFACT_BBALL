@@ -394,7 +394,7 @@
   #tooltip strong { font-weight: 650; }
 
   #pin-tooltip {
-    position: fixed;
+    position: absolute;
     display: none;
     z-index: 49;
     background: var(--tooltip-bg);
