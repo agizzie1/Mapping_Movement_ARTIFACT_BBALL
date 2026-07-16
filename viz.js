@@ -558,6 +558,22 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
   // doesn't get clobbered by the many other hover handlers throughout this
   // file that show/hide #tooltip for their own purposes.
   const pinTooltip = d3.select("#pin-tooltip");
+  // The pinned box must never sit on top of the Filters row: closed, it
+  // should clear the toggle button by a bit more than before; open, it
+  // should sit below the whole chip panel so every chip stays clickable.
+  // Returns null (no floor) if neither element is found.
+  function pinTipFilterFloor() {
+    const pad = 10;
+    const panel = document.getElementById(`filterpanel-${universeKey}`);
+    if (panel && !panel.hasAttribute("hidden")) {
+      return panel.getBoundingClientRect().bottom + pad;
+    }
+    const toggle = document.getElementById(`filtertoggle-${universeKey}`);
+    if (toggle) {
+      return toggle.getBoundingClientRect().bottom + pad + 10;
+    }
+    return null;
+  }
   // Prefers sitting fully outside the diagram's left/right edge (true
   // zero overlap, however wide the ring gets) on whichever side is
   // farther from the clicked label. Falls back to that side's CORNER of
@@ -581,6 +597,8 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
       left = onLeft ? (svgRect.left + pad) : (svgRect.right - pad - tipRect.width);
       top = onTop ? (svgRect.top + pad) : (svgRect.bottom - pad - tipRect.height);
     }
+    const filterFloor = pinTipFilterFloor();
+    if (filterFloor != null) top = Math.max(top, filterFloor);
     left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
     top = Math.max(8, Math.min(top, window.innerHeight - tipRect.height - 8));
     // #pin-tooltip is position:absolute (page coordinates), not fixed, so it
@@ -1234,6 +1252,18 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
       if (hoverActive.type === "school") renderSchoolChords(gSchoolChords, hoverActive.key, direction);
       else renderConferenceChords(gConfChords, hoverActive.key, direction);
     }
+  }
+
+  // Opening/closing the filters panel is a deliberate click, not a pan/zoom
+  // frame, so -- unlike those -- it's worth nudging a pinned conference's
+  // box out from under the panel rather than leaving it stuck in place.
+  const filterPanelEl = document.getElementById(`filterpanel-${universeKey}`);
+  if (filterPanelEl) {
+    new MutationObserver(() => {
+      if (!pin || pin.type !== "conference") return;
+      const labelNode = gConfLabels.selectAll("text.conf-label").filter(d => d.conference === pin.key).node();
+      if (labelNode) showPinTip(confStatsHtml(pin.key), labelNode.getBoundingClientRect());
+    }).observe(filterPanelEl, { attributes: true, attributeFilter: ["hidden"] });
   }
 
   filterCtl.onChange(() => {
