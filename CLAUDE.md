@@ -18,15 +18,16 @@ It holds five files, all required together:
 - `viz.js` — D3 rendering logic; fetches `chord_data.json` at load time
 - `chord_data.json` — the basketball transfer-portal data (`{ "bball": {...} }`)
 
-## Push policy — ask every time (NOT auto-push)
+## Standing authorization
 
-Unlike the football `Mapping_Movement_ARTIFACT` repo, the user does **not**
-want standing auto-push authorization here. Whenever Claude edits one of the
-four files above (e.g. tweaking `viz.js`, regenerating `chord_data.json`,
-adjusting styling), commit locally if useful, but always ask the user before
-running `git push` to `origin/main` — even though the SSH remote is fully
-configured and pushing is technically one command away. Wait for an explicit
-yes each time.
+The user has pre-authorized committing and pushing to `origin/main` in this
+repo whenever Claude edits one of the files above as part of a chat request
+(e.g. tweaking `viz.js`/`player-search.js`, regenerating `chord_data.json`,
+adjusting styling). No need to ask for confirmation before each push — just
+push and tell the user it's done. This authorization is scoped to this repo
+only. (Changed 2026-07-20 — this repo previously required asking every time,
+unlike the football repo; the user removed that requirement and it now
+matches the football repo's standing policy.)
 
 If the source of truth for these files is regenerated elsewhere in the
 parent project (`../build_chord_data.py` → `../chord_data.json`, or
