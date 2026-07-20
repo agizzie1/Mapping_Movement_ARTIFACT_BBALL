@@ -574,30 +574,20 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     }
     return null;
   }
-  // Prefers sitting fully outside the diagram's left/right edge (true
-  // zero overlap, however wide the ring gets) on whichever side is
-  // farther from the clicked label/tick. Falls back to that side's CORNER
-  // of the SVG's own square canvas -- always empty of ribbons, since the
-  // ring is circular inside a square -- only when the viewport is too
-  // narrow for the "fully outside" placement to fit on screen. Shared by
-  // the conference pin-tooltip and the player-search box so both corner
-  // themselves the same way and both respect the filters-panel floor.
+  // Always the diagram's own top-left corner -- not anchored to whatever
+  // conference/player was actually clicked -- so every pinned/searched box
+  // lands in the same predictable spot instead of jumping around depending
+  // on where on the ring you clicked. Shared by the conference pin-tooltip
+  // and the player-search box so both corner themselves the same way and
+  // both respect the filters-panel floor. `anchorRect` is accepted (some
+  // callers still pass one) but no longer used.
   function placeTip(tipSelection, anchorRect) {
     const pad = 14;
     const svgRect = svgEl.getBoundingClientRect();
     const tipRect = tipSelection.node().getBoundingClientRect();
-    const onLeft = (anchorRect.left + anchorRect.width / 2) < (svgRect.left + svgRect.width / 2);
-    const onTop = (anchorRect.top + anchorRect.height / 2) < (svgRect.top + svgRect.height / 2);
 
-    let left = onLeft ? (svgRect.left - pad - tipRect.width) : (svgRect.right + pad);
-    const fitsOutside = left >= 8 && left + tipRect.width <= window.innerWidth - 8;
-    let top;
-    if (fitsOutside) {
-      top = anchorRect.top;
-    } else {
-      left = onLeft ? (svgRect.left + pad) : (svgRect.right - pad - tipRect.width);
-      top = onTop ? (svgRect.top + pad) : (svgRect.bottom - pad - tipRect.height);
-    }
+    let left = svgRect.left + pad;
+    let top = svgRect.top + pad;
     left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
     top = Math.max(8, Math.min(top, window.innerHeight - tipRect.height - 8));
     // The filter floor is applied LAST, after the viewport-height clamp, so
