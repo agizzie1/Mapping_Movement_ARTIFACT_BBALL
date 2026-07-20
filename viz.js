@@ -608,6 +608,20 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     // same as it already does to show the rest of the panel.
     const filterFloor = pinTipFilterFloor();
     if (filterFloor != null) top = Math.max(top, filterFloor);
+    // Two of these boxes can be up at once (a pinned conference + a
+    // searched player), and both fall back to the same corner logic above,
+    // so without this they can land right on top of each other. Stack this
+    // one below any OTHER currently-visible corner box it would overlap,
+    // same "push down, never up" approach as the filter floor -- applied
+    // last so it always wins, and re-checked (not just once) since more
+    // than one box could theoretically be stacked already.
+    for (const other of document.querySelectorAll("#pin-tooltip, .player-search-tip")) {
+      if (other === tipSelection.node() || getComputedStyle(other).display === "none") continue;
+      const rect = other.getBoundingClientRect();
+      const overlapsHorizontally = left < rect.right && left + tipRect.width > rect.left;
+      if (overlapsHorizontally) top = Math.max(top, rect.bottom + pad);
+    }
+    top = Math.max(8, top);
     // These boxes are position:absolute (page coordinates), not fixed, so
     // they scroll along with the diagram instead of floating over unrelated
     // page content when the user scrolls -- convert the viewport-relative
