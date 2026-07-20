@@ -45,11 +45,28 @@ function createPlayerSearchController({ universeKey, d3, getEntries, placeTip, r
   let priorExpanded = false;
 
   function priorRowsHtml(entry) {
-    const pt = entry.dep.pt || [];
+    const pt = entry.dep.pt;
     return pt.map((stop, i) => {
       const from = i === 0 ? "&mdash;" : pt[i - 1].s;
       return `<div class="ps-prior-row"><div class="ps-prior-route">${from} &rarr; ${stop.s}</div><div class="ps-prior-year">${stop.y || "Unknown"}</div></div>`;
     }).join("");
+  }
+
+  // Two shapes of "pt" show up across the diagrams this module serves:
+  // an array of {s, y} chain stops (basketball -- real school/year history,
+  // expandable), or a plain integer count with no chain detail (football --
+  // "Prior Transfers" is scraped as a count only). Anything else (null/
+  // undefined/0) means no prior-transfer info at all.
+  function priorTransfersHtml(entry) {
+    const pt = entry.dep.pt;
+    if (Array.isArray(pt) && pt.length) {
+      return `<button type="button" class="ps-toggle-prior">${priorExpanded ? "Hide" : "Show"} prior transfers (${pt.length})</button>`
+        + (priorExpanded ? `<div class="ps-prior-list">${priorRowsHtml(entry)}</div>` : "");
+    }
+    if (typeof pt === "number" && pt > 0) {
+      return `<div class="ps-prior-count">${pt} prior transfer${pt === 1 ? "" : "s"}</div>`;
+    }
+    return "";
   }
 
   function isPinned(entry) {
@@ -59,14 +76,12 @@ function createPlayerSearchController({ universeKey, d3, getEntries, placeTip, r
 
   function statsHtml(entry) {
     const dep = entry.dep;
-    const pt = dep.pt || [];
     return `
       <button type="button" class="ps-close" title="Close">&times;</button>
       <div class="ps-name">${dep.n}</div>
       <div class="ps-route">${routeHtml(entry.school, dep)}</div>
       <div class="ps-meta">${dep.d} &middot; ${dep.gr} &middot; ${dep.pos}</div>
-      ${pt.length ? `<button type="button" class="ps-toggle-prior">${priorExpanded ? "Hide" : "Show"} prior transfers (${pt.length})</button>` : ""}
-      ${priorExpanded && pt.length ? `<div class="ps-prior-list">${priorRowsHtml(entry)}</div>` : ""}
+      ${priorTransfersHtml(entry)}
       <div class="ps-hint">${isPinned(entry) ? "Click to un-highlight ribbon" : "Click to highlight ribbon"}</div>
     `;
   }
