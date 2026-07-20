@@ -5,9 +5,16 @@ This folder is the git working copy for https://github.com/agizzie1/Mapping_Move
 It's the men's basketball counterpart to the football/`Mapping_Movement_ARTIFACT`
 repo, same 4-file split format.
 
-It holds exactly four files, all required together:
-- `index.html` — markup, links `style.css`, loads D3 v7 from CDN, then `viz.js`
+It holds five files, all required together:
+- `index.html` — markup, links `style.css`, loads D3 v7 from CDN, then
+  `player-search.js`, then `viz.js` (in that order — `viz.js`'s `boot()`
+  calls into `player-search.js`, so it must load first)
 - `style.css` — all styling
+- `player-search.js` — the "search a player by name" feature (box, dropdown,
+  click-to-highlight-ribbon, expandable prior-transfer history), factored
+  out so it can be dropped into the football diagram's viz.js too. See the
+  comment at the top of the file for the host contract a viz.js needs to
+  satisfy to use it.
 - `viz.js` — D3 rendering logic; fetches `chord_data.json` at load time
 - `chord_data.json` — the basketball transfer-portal data (`{ "bball": {...} }`)
 

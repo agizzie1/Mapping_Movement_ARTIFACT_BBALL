@@ -620,62 +620,20 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
   }
   function hidePinTip() { pinTooltip.style("display", "none"); }
 
-  // ---- player search: a second, independently-shown box (separate from
-  // the conference pin-tooltip above, which stays read-only/inert) that's
-  // itself clickable -- selecting a search result shows it read-only, and
-  // clicking the box toggles that player's ribbon highlight on/off, same
-  // as clicking their tick directly would. Positioned with the exact same
-  // placeTip() logic, anchored to the player's (always-rendered, if
-  // invisible pre-zoom) tick element rather than a conference label.
-  const searchTip = d3.select("#player-search-tip");
-  let searchedPlayer = null; // { el, dep, conf, school, a0, a1 } from tickRegistry, or null
-  let searchPriorExpanded = false;
-  function priorTransferRowsHtml(entry) {
-    const pt = entry.dep.pt || [];
-    return pt.map((stop, i) => {
-      const from = i === 0 ? "&mdash;" : pt[i - 1].s;
-      return `<div class="ps-prior-row"><div class="ps-prior-route">${from} &rarr; ${stop.s}</div><div class="ps-prior-year">${stop.y || "Unknown"}</div></div>`;
-    }).join("");
-  }
-  function playerStatsHtml(entry) {
-    const dep = entry.dep;
-    const isPinned = pin && pin.type === "player" && pin.key === playerKey(entry.school, dep);
-    const pt = dep.pt || [];
-    return `
-      <button type="button" class="ps-close" title="Close">&times;</button>
-      <div class="ps-name">${dep.n}</div>
-      <div class="ps-route">${entry.school} &mdash; ${depStatusHtml(dep)}</div>
-      <div class="ps-meta">${dep.d} &middot; ${dep.gr} &middot; ${dep.pos}</div>
-      ${pt.length ? `<button type="button" class="ps-toggle-prior">${searchPriorExpanded ? "Hide" : "Show"} prior transfers (${pt.length})</button>` : ""}
-      ${searchPriorExpanded && pt.length ? `<div class="ps-prior-list">${priorTransferRowsHtml(entry)}</div>` : ""}
-      <div class="ps-hint">${isPinned ? "Click to un-highlight ribbon" : "Click to highlight ribbon"}</div>
-    `;
-  }
-  function showSearchTip(entry) {
-    searchedPlayer = entry;
-    searchTip.style("display", "block").classed("ps-active", pin && pin.type === "player" && pin.key === playerKey(entry.school, entry.dep)).html(playerStatsHtml(entry));
-    placeTip(searchTip, entry.el.getBoundingClientRect());
-  }
-  function refreshSearchTip() {
-    if (!searchedPlayer) return;
-    searchTip.classed("ps-active", pin && pin.type === "player" && pin.key === playerKey(searchedPlayer.school, searchedPlayer.dep)).html(playerStatsHtml(searchedPlayer));
-  }
-  function hideSearchTip() {
-    searchedPlayer = null;
-    searchPriorExpanded = false;
-    searchTip.style("display", "none");
-  }
-  function toggleSearchedHighlight() {
-    if (!searchedPlayer) return;
-    const key = playerKey(searchedPlayer.school, searchedPlayer.dep);
-    if (pin && pin.type === "player" && pin.key === key) setPin(null);
-    else setPin({ type: "player", key, school: searchedPlayer.school, dep: searchedPlayer.dep, tickStart: searchedPlayer.a0, tickEnd: searchedPlayer.a1 });
-    refreshSearchTip();
-  }
-  searchTip.on("click", (event) => {
-    if (event.target.closest(".ps-close")) { hideSearchTip(); return; }
-    if (event.target.closest(".ps-toggle-prior")) { searchPriorExpanded = !searchPriorExpanded; refreshSearchTip(); return; }
-    toggleSearchedHighlight();
+  // Player search (box + dropdown + click-to-highlight) lives in the
+  // shared player-search.js so it can be dropped into the football diagram
+  // too -- see that file for the host contract this satisfies. getPin/
+  // setPin/tickRegistry are referenced here only inside callbacks, so it's
+  // fine that `pin`/`tickRegistry` aren't declared until further down this
+  // function; nothing above actually calls these callbacks before then.
+  const playerSearch = createPlayerSearchController({
+    universeKey, d3,
+    getEntries: () => tickRegistry,
+    placeTip,
+    routeHtml: (school, dep) => `${school} &mdash; ${depStatusHtml(dep)}`,
+    playerKey,
+    getPin: () => pin,
+    setPin: (next) => setPin(next),
   });
 
   // Shared by the hover tooltip and the pinned tooltip so both show the
@@ -1301,6 +1259,10 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     }
     restoreBaseDim();
     updatePinIndicator();
+    // Keep the search box's "active"/highlight-hint state in sync even
+    // when `pin` changes via some other path (a direct tick click, a
+    // conference pin replacing it, etc.), not just via the box's own click.
+    playerSearch.refresh();
   }
   function setPin(next) { pin = next; pinnedSegKey = null; redrawPin({ reposition: true }); }
   function togglePin(candidate) {
@@ -1366,23 +1328,6 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
   leftoverItem.append("span").attr("class", "legend-swatch").style("background", "var(--leftover)");
   leftoverItem.append("span").attr("class", "legend-label").text("Still in portal / left D1");
 
-  // Case-insensitive; names starting with the query rank above names that
-  // merely contain it. tickRegistry already has one entry per player
-  // (committed or still-in-portal alike), each carrying the tick's own
-  // angular position, so a match doesn't require ever having zoomed in.
-  function searchPlayers(query) {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    const starts = [], contains = [];
-    for (const entry of tickRegistry) {
-      const name = entry.dep.n.toLowerCase();
-      if (name.startsWith(q)) starts.push(entry);
-      else if (name.includes(q)) contains.push(entry);
-    }
-    const byName = (a, b) => a.dep.n.localeCompare(b.dep.n);
-    return [...starts.sort(byName), ...contains.sort(byName)].slice(0, 20);
-  }
-
   return {
     setShowAll,
     setDirection,
@@ -1390,9 +1335,9 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     zoomIn: () => zoomCtl.zoomBy(1.5),
     zoomOut: () => zoomCtl.zoomBy(1 / 1.5),
     zoomReset: () => zoomCtl.reset(),
-    searchPlayers,
-    selectSearchResult: (entry) => showSearchTip(entry),
-    clearSearch: () => hideSearchTip(),
+    searchPlayers: playerSearch.searchPlayers,
+    selectResult: playerSearch.selectResult,
+    clearSearch: playerSearch.clearSearch,
   };
 }
 
@@ -1429,38 +1374,7 @@ function wireUniverseControls(key, handleRef) {
   const pinClear = document.getElementById(`pinclear-${key}`);
   if (pinClear) pinClear.addEventListener("click", () => handleRef.current.clearPin());
 
-  const searchInput = document.getElementById(`playersearch-${key}`);
-  const searchResults = document.getElementById(`playersearch-results-${key}`);
-  if (searchInput && searchResults) {
-    let matches = [];
-    function renderResults() {
-      searchResults.innerHTML = matches.map((m, i) => `
-        <button type="button" class="player-search-result" data-i="${i}">
-          <span class="psr-name">${m.dep.n}</span><span class="psr-school">${m.school}</span>
-        </button>`).join("");
-      searchResults.hidden = matches.length === 0;
-    }
-    searchInput.addEventListener("input", () => {
-      matches = handleRef.current.searchPlayers(searchInput.value);
-      renderResults();
-    });
-    searchInput.addEventListener("focus", () => { if (searchInput.value.trim()) renderResults(); });
-    searchInput.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") { searchResults.hidden = true; searchInput.blur(); }
-    });
-    searchResults.addEventListener("click", (event) => {
-      const btn = event.target.closest(".player-search-result");
-      if (!btn) return;
-      const entry = matches[Number(btn.dataset.i)];
-      if (!entry) return;
-      handleRef.current.selectSearchResult(entry);
-      searchInput.value = entry.dep.n;
-      searchResults.hidden = true;
-    });
-    document.addEventListener("click", (event) => {
-      if (!searchInput.contains(event.target) && !searchResults.contains(event.target)) searchResults.hidden = true;
-    });
-  }
+  wirePlayerSearchInput(key, handleRef);
 }
 
 function boot(CHORD_DATA) {

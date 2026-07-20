@@ -461,7 +461,7 @@
   .psr-name { font-weight: 550; }
   .psr-school { color: var(--ink-3); font-size: 11.5px; flex: none; }
 
-  #player-search-tip {
+  .player-search-tip {
     position: absolute;
     display: none;
     z-index: 49;
@@ -475,10 +475,10 @@
     max-width: 260px;
     box-shadow: 0 4px 18px rgba(0,0,0,0.22);
   }
-  #player-search-tip.ps-active {
+  .player-search-tip.ps-active {
     box-shadow: 0 0 0 2px var(--accent), 0 4px 18px rgba(0,0,0,0.22);
   }
-  #player-search-tip .ps-close {
+  .player-search-tip .ps-close {
     float: right;
     appearance: none;
     border: none;
@@ -490,11 +490,11 @@
     cursor: pointer;
     padding: 0 0 4px 8px;
   }
-  #player-search-tip .ps-close:hover { opacity: 1; }
-  #player-search-tip .ps-name { font-weight: 650; font-size: 13.5px; }
-  #player-search-tip .ps-route { margin-top: 2px; }
-  #player-search-tip .ps-meta { color: var(--tooltip-ink); opacity: 0.75; margin-top: 2px; }
-  #player-search-tip .ps-toggle-prior {
+  .player-search-tip .ps-close:hover { opacity: 1; }
+  .player-search-tip .ps-name { font-weight: 650; font-size: 13.5px; }
+  .player-search-tip .ps-route { margin-top: 2px; }
+  .player-search-tip .ps-meta { color: var(--tooltip-ink); opacity: 0.75; margin-top: 2px; }
+  .player-search-tip .ps-toggle-prior {
     display: block;
     appearance: none;
     border: none;
@@ -505,7 +505,7 @@
     cursor: pointer;
     padding: 8px 0 0;
   }
-  #player-search-tip .ps-prior-list {
+  .player-search-tip .ps-prior-list {
     margin-top: 6px;
     padding-top: 6px;
     border-top: 1px solid rgba(255,255,255,0.18);
@@ -513,13 +513,13 @@
     flex-direction: column;
     gap: 5px;
   }
-  #player-search-tip .ps-prior-row {
+  .player-search-tip .ps-prior-row {
     padding-left: 10px;
     border-left: 2px solid rgba(255,255,255,0.25);
     font-size: 11.5px;
   }
-  #player-search-tip .ps-prior-year { opacity: 0.7; }
-  #player-search-tip .ps-hint {
+  .player-search-tip .ps-prior-year { opacity: 0.7; }
+  .player-search-tip .ps-hint {
     margin-top: 8px;
     font-size: 11px;
     opacity: 0.6;
