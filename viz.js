@@ -6,9 +6,6 @@
 // basketball has no FBS/FCS-style tier split -- every conference is one
 // single universe, so this drops prepareCombined/renderCombined and the
 // tab UI entirely; there's just one ring, one legend, one filter bar.
-// Prior-transfer history is also out of scope for this diagram (per the
-// build's instructions), so there's no "Prior transfers" filter dimension
-// here, and playerMetaHtml() only shows position + class.
 // =============================================================================
 
 const PALETTE = {
@@ -28,6 +25,11 @@ const ZOOM_OUT_FLOOR = 0.4; // how far below 100% the +/- buttons, Ctrl/Cmd+scro
 // are proportionally wider at rest -- a lower zoom ceiling reaches
 // comfortable tick width sooner than football's FBS (150) or FCS (30) needed.
 const MAX_ZOOM = 22;
+// Half-width (radians) of a prior-transfer hop's fixed tick anchor -- see
+// renderUniverse's own schoolAnchorSpan for why this can't be a
+// proportional flow-subdivision slice like the current-transfer ribbon
+// gets. Ported from the football project's viz.js (2026-07-21).
+const PRIOR_HOP_HALF_WIDTH = 0.006;
 
 function currentMode() {
   const stamped = document.documentElement.getAttribute("data-theme");
@@ -638,6 +640,11 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     playerKey,
     getPin: () => pin,
     setPin: (next) => setPin(next),
+    onPriorToggle: (expanded) => { priorTransfersOn = expanded; redrawPin(); },
+    onHopSelect: (num) => {
+      selectedHopNum = num;
+      if (pin && pin.type === "player") renderPriorHopChords(pin.school, pin.dep);
+    },
   });
 
   // Shared by the hover tooltip and the pinned tooltip so both show the
@@ -734,6 +741,11 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
   // ---- layers, back to front -------------------------------------------
   const gPinConfChords = root.append("g").attr("class", "layer-pin-conf-chords");
   const gPinSchoolChords = root.append("g").attr("class", "layer-pin-school-chords");
+  // Prior-transfer-history ribbons (see renderPriorHopChords below) sit
+  // behind gPinPlayerChords, so the player's current/most-recent-transfer
+  // ribbon always renders on top of its own prior history where the two
+  // visually overlap.
+  const gPinPriorChords = root.append("g").attr("class", "layer-pin-prior-chords");
   const gPinPlayerChords = root.append("g").attr("class", "layer-pin-player-chords");
   const gConfChords = root.append("g").attr("class", "layer-conf-chords");
   const gSchoolChords = root.append("g").attr("class", "layer-school-chords");
@@ -1101,9 +1113,127 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     }
   }
 
+  // Grey fallback for a hop's origin conference that isn't in this
+  // diagram's own conference list -- a player's very first, pre-transfer
+  // school only has a known conference if it happens to appear elsewhere
+  // in the sheet (see build_school_conference_map in build_chord_data.py).
+  // Ported from the football project's viz.js (2026-07-21).
+  function colorOfOrGrey(conf) {
+    return (conf && PALETTE.conferences.includes(conf)) ? colorOf(conf) : "var(--leftover)";
+  }
+
+  // A small fixed-width tick centered on a school's own inner-ring arc,
+  // used as a prior-transfer hop's endpoint. Unlike the player's CURRENT
+  // departure (which has a real per-player tick angle, a0/a1, because it's
+  // one of THIS season's tracked departures) a prior hop is a historical
+  // event from a past season that isn't itself in `data.flows` at all --
+  // there's no aggregate subdivision to anchor to, so this just marks the
+  // school's location on the ring rather than implying a proportional
+  // share of it. Returns null (skipping that hop's ribbon entirely) for a
+  // school this diagram doesn't track at all (true one-off D2/D3/NAIA
+  // stops).
+  function schoolAnchorSpan(school) {
+    const d = prepared.innerByName.get(school);
+    if (!d) return null;
+    const mid = midAngle(d);
+    const half = Math.min((d.endAngle - d.startAngle) / 2, PRIOR_HOP_HALF_WIDTH);
+    return { startAngle: mid - half, endAngle: mid + half };
+  }
+
+  // Midpoint between a hop's two endpoints, pulled progressively toward
+  // the circle's center by hop number -- guards against a "there and back"
+  // pair (A -> B then later B -> A, not uncommon in this data) producing
+  // an identical straight-line midpoint for both hops, which would
+  // otherwise stack both numbered badges illegibly on top of each other.
+  function hopLabelPoint(srcSpan, tgtSpan, num) {
+    const p1 = polar(midAngle(srcSpan), geo.chordRadius);
+    const p2 = polar(midAngle(tgtSpan), geo.chordRadius);
+    const mx = (p1[0] + p2[0]) / 2, my = (p1[1] + p2[1]) / 2;
+    const pull = 1 - Math.min(0.5, num * 0.09);
+    return [mx * pull, my * pull];
+  }
+
+  function clearPriorHopChords() { gPinPriorChords.selectAll("*").remove(); }
+
+  // Draws every prior-transfer hop (dep.pt, oldest first) as its own thin,
+  // numbered, dashed ribbon, matching the corresponding row in the
+  // player-search tip's expandable list (see player-search.js's
+  // priorRowsHtml) -- clicking either one highlights the other via
+  // selectedHopNum. Each hop is colored by the conference the player was
+  // leaving FROM in that hop specifically (build_chord_data.py's "fc"),
+  // falling back to grey when unknown (colorOfOrGrey); a hop is skipped
+  // entirely when either school in the pair isn't tracked in this data at
+  // all. The player's current/most-recent transfer is deliberately NOT
+  // included here -- it already has its own always-on ribbon via
+  // renderPlayerChordInto. Ported from the football project's viz.js
+  // (2026-07-21).
+  function renderPriorHopChords(school, dep) {
+    clearPriorHopChords();
+    const pt = dep.pt || [];
+    for (let i = 0; i < pt.length; i++) {
+      const stop = pt[i];
+      const num = i + 1;
+      const srcSpan = schoolAnchorSpan(stop.f);
+      const tgtSpan = schoolAnchorSpan(stop.s);
+      if (!srcSpan || !tgtSpan) continue;
+      const selected = selectedHopNum === num;
+      const color = colorOfOrGrey(stop.fc);
+      const yearText = stop.y || "Unknown";
+      const tipHtml = `<strong>#${num} &mdash; ${dep.n}</strong><br>${stop.f} &rarr; ${stop.s}<br>${yearText}`;
+      const hopClick = (event) => { event.stopPropagation(); selectHopFromRibbon(num); };
+      gPinPriorChords.append("path")
+        .attr("class", "chord chord-prior-hop" + (selected ? " chord-prior-hop-selected" : ""))
+        .attr("d", zoomAwareRibbon({
+          source: { startAngle: srcSpan.startAngle, endAngle: srcSpan.endAngle, radius: geo.chordRadius },
+          target: { startAngle: tgtSpan.startAngle, endAngle: tgtSpan.endAngle, radius: geo.chordRadius },
+        }))
+        .attr("fill", color)
+        // .style(), not .attr(), for stroke -- this diagram's base `.chord`
+        // CSS rule sets a fixed `stroke: var(--bg-panel)` (an actual
+        // stylesheet rule beats a presentation attribute of the same
+        // element in the cascade), which would otherwise force every hop's
+        // dashed outline to the neutral panel color regardless of its
+        // conference, making the dash pattern invisible against the page.
+        .style("stroke", color)
+        .style("opacity", selected ? 0.95 : (selectedHopNum ? 0.25 : 0.6))
+        .style("stroke-dasharray", "1 3")
+        .on("click", hopClick)
+        .on("mouseenter", (event) => showTip(tipHtml, event))
+        .on("mousemove", moveTip)
+        .on("mouseleave", hideTip);
+
+      const [lx, ly] = hopLabelPoint(srcSpan, tgtSpan, num);
+      const labelG = gPinPriorChords.append("g")
+        .attr("class", "hop-label" + (selected ? " hop-label-selected" : ""))
+        .attr("transform", `translate(${lx},${ly})`)
+        .style("opacity", selected ? 1 : (selectedHopNum ? 0.4 : 0.85))
+        .on("click", hopClick)
+        .on("mouseenter", (event) => showTip(tipHtml, event))
+        .on("mousemove", moveTip)
+        .on("mouseleave", hideTip);
+      labelG.append("circle").attr("r", 9).attr("fill", color);
+      labelG.append("text").text(num);
+    }
+  }
+
+  // Ribbon <-> list-row selection is bidirectional (see player-search.js):
+  // a ribbon click updates this diagram's own selectedHopNum (to dim/
+  // highlight ribbons) and pushes the same number into playerSearch's
+  // selectHop() so the matching row highlights too.
+  function selectHopFromRibbon(num) {
+    selectedHopNum = selectedHopNum === num ? null : num;
+    if (pin && pin.type === "player") renderPriorHopChords(pin.school, pin.dep);
+    playerSearch.selectHop(selectedHopNum);
+  }
+
   function togglePlayerPin(school, dep, a0, a1) {
     const key = playerKey(school, dep);
     const wasPinned = pin && pin.type === "player" && pin.key === key;
+    // A fresh pin (a different player, or nothing previously pinned) always
+    // starts with prior-transfer ribbons off -- otherwise clicking straight
+    // into a new player's tick could carry over a stale "show prior
+    // transfers" state left on from whichever player was pinned before.
+    if (!wasPinned) { priorTransfersOn = false; selectedHopNum = null; }
     togglePin({ type: "player", key, school, dep, tickStart: a0, tickEnd: a1 });
     lastPanelRefresh = null;
     if (wasPinned) hideSidePanel(); else openPlayerPanel(school, dep);
@@ -1225,6 +1355,11 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
   let lastPanelRefresh = null;
   let pinnedSegKey = null;
   let direction = getDirection(universeKey);
+  // Multi-hop transfer-history ribbons, toggled by the player-search tip's
+  // "Show prior transfers" button. Ported from the football project's
+  // viz.js (2026-07-21).
+  let priorTransfersOn = false;
+  let selectedHopNum = null; // 1-based; bidirectionally synced with the ps-prior-list row via playerSearch.selectHop
 
   function pinLabel(p) {
     if (p.type === "player") return `${p.dep.n} &mdash; ${p.school} &rarr; ${p.dep.t} (${p.dep.d})`;
@@ -1240,6 +1375,7 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     gPinConfChords.selectAll("*").remove();
     gPinSchoolChords.selectAll("*").remove();
     gPinPlayerChords.selectAll("*").remove();
+    clearPriorHopChords();
     root.selectAll(".pin-highlight").classed("pin-highlight", false);
     if (reposition) hidePinTip();
     if (pin) {
@@ -1259,6 +1395,7 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
       } else if (pin.type === "player") {
         renderPlayerChordInto(gPinPlayerChords, pin.school, pin.dep, pin.tickStart, pin.tickEnd);
         root.selectAll(`[data-player-key="${cssEscape(pin.key)}"]`).classed("pin-highlight", true);
+        if (priorTransfersOn) renderPriorHopChords(pin.school, pin.dep);
       }
     }
     restoreBaseDim();
