@@ -291,24 +291,28 @@ function classifyIsLeftoverLabel(dep) {
   return dep.tc === "N/A (not yet committed)" || !PALETTE.conferences.includes(dep.tc);
 }
 function playerMetaHtml(dep) {
-  return `${dep.pos} &middot; ${dep.gr}`;
+  const n = dep.pt.length;
+  return `${dep.pos} &middot; ${dep.gr} &middot; ${n} prior transfer${n === 1 ? "" : "s"}`;
 }
 function playerKey(school, dep) { return school + " " + dep.n + " " + dep.d; }
 
 // ---------------------------------------------------------------------------
-// Filters: position, class/grade, and transfer month are all "additive"
-// (multi-select within a dimension is OR) and "stackable" (across
-// dimensions is AND). Ring/segment geometry never changes shape from these
-// -- only which ticks/ribbons are highlighted vs. dimmed, which players
-// show up in the side panel, and a live match count. No "Prior transfers"
-// dimension here (unlike football) -- that data is out of scope for this
-// diagram.
+// Filters: position, class/grade, prior-transfer count, and transfer month
+// are all "additive" (multi-select within a dimension is OR) and
+// "stackable" (across dimensions is AND). Ring/segment geometry never
+// changes shape from these -- only which ticks/ribbons are highlighted vs.
+// dimmed, which players show up in the side panel, and a live match count.
+// "Prior transfers" ported from the football project's viz.js (2026-07-21)
+// -- unlike football, `dep.pt` here is always a real array (no legacy
+// bare-count shape to special-case), so this dimension reads `dep.pt.length`
+// directly rather than through a `ptCount()` indirection.
 // ---------------------------------------------------------------------------
 const FILTER_DIMS = [
   { key: "conf", label: "Conference" },
   { key: "school", label: "School" },
   { key: "pos", label: "Position" },
   { key: "gr", label: "Class" },
+  { key: "pt", label: "Prior transfers" },
   { key: "d", label: "Transfer date" },
 ];
 const GRADE_ORDER = [
@@ -329,6 +333,7 @@ function sortFilterValues(dim, values, conferenceOrder) {
   const arr = Array.from(values);
   if (dim === "d") return arr.sort((a, b) => dateSortKey(a) - dateSortKey(b));
   if (dim === "gr") return arr.sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
+  if (dim === "pt") return arr.sort((a, b) => a - b);
   if (dim === "conf" && conferenceOrder) return arr.sort((a, b) => conferenceOrder.indexOf(a) - conferenceOrder.indexOf(b));
   return arr.sort((a, b) => (a === "Unknown" ? 1 : b === "Unknown" ? -1 : a.localeCompare(b)));
 }
@@ -348,6 +353,10 @@ function matchesFilters(dep, filters, home) {
     }
     if (dim === "school") {
       if (filters.school.size && !filters.school.has(home.school)) return false;
+      continue;
+    }
+    if (dim === "pt") {
+      if (filters.pt.size && !filters.pt.has(dep.pt.length)) return false;
       continue;
     }
     const set = filters[dim];
@@ -400,6 +409,7 @@ function buildFilterBar(key, allDeps, conferenceOrder) {
     container.innerHTML = "";
     const raw = dim === "conf" ? allDeps.map(r => r.conf)
       : dim === "school" ? allDeps.map(r => r.school)
+      : dim === "pt" ? allDeps.map(r => r.dep.pt.length)
       : allDeps.map(r => r.dep[dim]);
     const values = sortFilterValues(dim, new Set(raw), conferenceOrder);
     for (const v of values) {
@@ -505,6 +515,21 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
   }
   function openPlayerPanel(school, dep) {
     showSidePanel(dep.n, [{ name: `${school} &mdash; ${depStatusHtml(dep)}`, detail: `${dep.d}<br>${playerMetaHtml(dep)}` }]);
+  }
+  // Rows in a FILTERED side-panel list (built from a school/conference-pair
+  // segment click, "show all", etc.) previously only had an onClick when
+  // the filtered set happened to narrow to exactly one player, and even
+  // then it just isolated/dimmed that one ribbon -- not the richer info box
+  // a player-search result opens. This makes every such row open that same
+  // player-search-tip box regardless of how many rows are in the list, by
+  // finding that exact player's own tick entry (every departure -- including
+  // "leftover"/still-in-portal ones -- always has one) and feeding it
+  // through the same selectResult() the search dropdown itself uses.
+  // Ported from the football project's viz.js (2026-07-21).
+  function openPlayerInfoTip(school, dep) {
+    const key = playerKey(school, dep);
+    const entry = tickRegistry.find(e => playerKey(e.school, e.dep) === key);
+    if (entry) playerSearch.selectResult(entry);
   }
 
   let zoomDetail = false;
@@ -824,7 +849,7 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
             const matched = filtersActive(filters) ? deps.filter(dep => matchesFilters(dep, filters, { conf: d.conference, school: d.school })) : deps;
             const rows = matched.map(dep => ({
               name: dep.n, detail: `${dep.d}<br>${playerMetaHtml(dep)}`,
-              onClick: matched.length === 1 ? (selected) => (selected ? isolateRibbon(segKey) : clearRibbonIsolation()) : undefined,
+              onClick: () => openPlayerInfoTip(d.school, dep),
             }));
             showSidePanel(`${d.school} &rarr; ${seg.target}`, rows);
           });
@@ -861,7 +886,10 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
           event.stopPropagation();
           openSegmentPanel(() => {
             const list = filtersActive(filters) ? players.leftover.filter(dep => matchesFilters(dep, filters, { conf: d.conference, school: d.school })) : players.leftover;
-            const rows = list.map(dep => ({ name: dep.n, detail: `${depStatusHtml(dep)} &middot; ${dep.d}<br>${playerMetaHtml(dep)}` }));
+            const rows = list.map(dep => ({
+              name: dep.n, detail: `${depStatusHtml(dep)} &middot; ${dep.d}<br>${playerMetaHtml(dep)}`,
+              onClick: () => openPlayerInfoTip(d.school, dep),
+            }));
             showSidePanel(`${d.school} &mdash; still in portal / left D1`, rows);
           });
         });
@@ -968,6 +996,7 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
             const fresh = filteredConfDeps(conf, seg.target);
             const rows = fresh.map(({ school, dep }) => ({
               name: dep.n, detail: `${school} &rarr; ${dep.t} &middot; ${dep.d}<br>${playerMetaHtml(dep)}`,
+              onClick: () => openPlayerInfoTip(school, dep),
             }));
             showSidePanel(pairLabel(fresh, conf, seg.target), rows);
           });
@@ -997,6 +1026,7 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
             const fresh = filteredConfDeps(otherConf, conf);
             const rows = fresh.map(({ school, dep }) => ({
               name: dep.n, detail: `${school} &rarr; ${dep.t} &middot; ${dep.d}<br>${playerMetaHtml(dep)}`,
+              onClick: () => openPlayerInfoTip(school, dep),
             }));
             showSidePanel(pairLabel(fresh, otherConf, conf), rows);
           });
@@ -1036,10 +1066,9 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
             event.stopPropagation();
             openSegmentPanel(() => {
               const deps = filteredSchoolDeps(school, seg.target);
-              const pairKey = `${school}::${seg.target}`;
               const rows = deps.map(dep => ({
                 name: dep.n, detail: `${dep.d}<br>${playerMetaHtml(dep)}`,
-                onClick: deps.length === 1 ? (selected) => (selected ? isolateRibbon(pairKey) : clearRibbonIsolation()) : undefined,
+                onClick: () => openPlayerInfoTip(school, dep),
               }));
               showSidePanel(`${school} &rarr; ${seg.target}`, rows);
             });
@@ -1075,10 +1104,9 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
             event.stopPropagation();
             openSegmentPanel(() => {
               const deps = filteredSchoolDeps(f.source, school);
-              const pairKey = `${f.source}::${school}`;
               const rows = deps.map(dep => ({
                 name: dep.n, detail: `${dep.d}<br>${playerMetaHtml(dep)}`,
-                onClick: deps.length === 1 ? (selected) => (selected ? isolateRibbon(pairKey) : clearRibbonIsolation()) : undefined,
+                onClick: () => openPlayerInfoTip(f.source, dep),
               }));
               showSidePanel(`${f.source} &rarr; ${school}`, rows);
             });
@@ -1280,6 +1308,7 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
             const rows = fresh.map(({ school, dep }) => ({
               name: dep.n,
               detail: `${school} &rarr; ${dep.t} &middot; ${dep.d}<br>${playerMetaHtml(dep)}`,
+              onClick: () => openPlayerInfoTip(school, dep),
             }));
             showSidePanel(pairLabel(fresh, conf, seg.target), rows);
           });
