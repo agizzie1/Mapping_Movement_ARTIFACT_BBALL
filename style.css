@@ -237,8 +237,24 @@
     visibility: hidden;
   }
   .filter-clear.visible { visibility: visible; }
+  /* Holds .filter-panel and, when open, #side-panel (moved in here by
+     positionSidePanel in viz.js) side by side on the same row -- filters on
+     the left, popup on the right, matching each other's height. Whichever
+     of the two is absent/hidden just leaves the other to fill the row on
+     its own, so this needs no separate "paired" vs "solo" styling. Wraps
+     to stack vertically instead of squeezing illegibly on narrow screens.
+     Ported from the football project's viz.js/style.css (2026-07-21). */
+  .filter-panel-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 12px;
+  }
   .filter-panel {
-    flex-basis: 100%;
+    flex: 1 1 320px;
+    min-width: 0;
+    max-height: 50vh;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -572,24 +588,30 @@
     font-style: italic;
   }
 
+  /* In normal document flow (JS moves this node into whichever panel's
+     .filter-panel-row triggered it -- see positionSidePanel in viz.js)
+     instead of position: fixed, so it can never float above the filters:
+     it only ever shares a row with .filter-panel, sitting to its right at
+     matching height (align-items: stretch on the row handles that), and
+     pushes the diagram down while open. Scrolling up to reach the filters
+     scrolls this out of view along with them; scrolling back down reveals
+     both again together. Ported from the football project's viz.js/
+     style.css (2026-07-21) -- this used to be a fixed slide-in drawer,
+     independent of the filters panel entirely. */
   #side-panel {
-    position: fixed;
-    top: 24px;
-    right: 24px;
-    bottom: 24px;
-    width: 300px;
-    z-index: 60;
+    display: none;
+    flex-direction: column;
+    flex: 1 1 320px;
+    min-width: 0;
+    max-width: 420px;
+    max-height: 50vh;
     background: var(--bg-panel);
     border: 1px solid var(--hairline);
     border-radius: 10px;
     box-shadow: 0 8px 28px rgba(0,0,0,0.18);
-    display: flex;
-    flex-direction: column;
     overflow: hidden;
-    transform: translateX(calc(100% + 24px));
-    transition: transform 180ms ease;
   }
-  #side-panel.open { transform: translateX(0); }
+  #side-panel.open { display: flex; }
   #side-panel-header {
     display: flex;
     align-items: flex-start;
@@ -617,6 +639,8 @@
   }
   #side-panel-close:hover { background: var(--hairline); color: var(--ink-1); }
   #side-panel-body {
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 4px 14px 14px;
   }
@@ -634,17 +658,15 @@
     font-size: 12.5px;
   }
   .side-panel-row:last-child { border-bottom: none; }
+  .side-panel-row.spr-clickable { cursor: pointer; margin: 0 -14px; padding: 7px 14px; }
+  .side-panel-row.spr-clickable:hover { background: var(--bg-page); }
+  .side-panel-row.spr-clickable.selected { background: var(--hairline); }
   .spr-name { color: var(--ink-1); font-weight: 550; }
   .spr-detail { color: var(--ink-3); font-size: 11.5px; }
   .side-panel-empty { padding: 10px 0; color: var(--ink-3); font-size: 12.5px; }
 
   @media (max-width: 860px) {
-    #side-panel {
-      top: auto; left: 12px; right: 12px; bottom: 12px;
-      width: auto; height: 45vh;
-      transform: translateY(calc(100% + 12px));
-    }
-    #side-panel.open { transform: translateY(0); }
+    #side-panel { max-width: none; max-height: 45vh; }
   }
 
   footer {
