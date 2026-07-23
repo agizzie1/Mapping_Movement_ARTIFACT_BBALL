@@ -699,7 +699,7 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     universeKey, d3,
     getEntries: () => tickRegistry,
     placeTip,
-    routeHtml: (school, dep) => `${school} &mdash; ${depStatusHtml(dep)}`,
+    routeHtml: (school, dep) => `${school} &rarr; ${depStatusHtml(dep)}`,
     playerKey,
     getPin: () => pin,
     setPin: (next) => setPin(next),
