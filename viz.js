@@ -552,15 +552,21 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
     currentZoomK = k;
     refreshRibbonsForZoom();
   });
+  let zoomRefreshQueued = false;
   function refreshRibbonsForZoom() {
-    if (hoverActive) {
-      if (hoverActive.type === "school") renderSchoolChords(gSchoolChords, hoverActive.key, direction);
+     if (zoomRefreshQueued) return;
+      zoomRefreshQueued = true;
+      requestAnimationFrame(() => {
+     zoomRefreshQueued = false;
+       if (hoverActive) {
+       if (hoverActive.type === "school") renderSchoolChords(gSchoolChords, hoverActive.key, direction);
       else renderConferenceChords(gConfChords, hoverActive.key, direction);
     } else if (shouldAutoShow()) {
       renderAllConferenceChords();
     }
     if (pin) redrawPin();
-  }
+  });
+}
 
   const mode = currentMode();
   const colorOf = conf => PALETTE[mode][PALETTE.conferences.indexOf(conf)];
