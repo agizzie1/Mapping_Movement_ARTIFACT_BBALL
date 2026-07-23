@@ -1398,10 +1398,24 @@ function renderUniverse(svgEl, legendEl, universeKey, label, prepared, geo) {
   function shouldAutoShow() { return showAll || filtersActive(filters); }
 
   // ---- dimming ----------------------------------------------------------
+  let dimmedNodes = new Set();
   function setDim(matchFn) {
-    root.selectAll(".outer-school, .inner-school").classed("dimmed", n => !matchFn(n));
+    const nextDimmed = new Set();
+    root.selectAll(".outer-school, .inner-school").each(function (n) {
+      if (!matchFn(n)) nextDimmed.add(this);
+    });
+    for (const el of dimmedNodes) {
+      if (!nextDimmed.has(el)) el.classList.remove("dimmed");
+    }
+    for (const el of nextDimmed) {
+      if (!dimmedNodes.has(el)) el.classList.add("dimmed");
+    }
+    dimmedNodes = nextDimmed;
   }
-  function clearDim() { root.selectAll(".outer-school, .inner-school").classed("dimmed", false); }
+  function clearDim() {
+    for (const el of dimmedNodes) el.classList.remove("dimmed");
+    dimmedNodes = new Set();
+  }
   function restoreBaseDim() {
     if (!pin) { clearDim(); return; }
     if (pin.type === "conference") setDim(n => n.conference === pin.key);
